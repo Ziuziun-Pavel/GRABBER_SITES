@@ -6,7 +6,7 @@ require_once('simple_html_dom.php');
 require_once('Array2XML.php');
 
 define('URL','https://dverprom.by/katalog/');
-define('VIEW','?limit=2');
+define('VIEW','?limit=3');
 
 $i = 0;
 $html = file_get_html(URL);
@@ -43,39 +43,51 @@ foreach ($html->find('.nav-submenu__item') as $ins ) {
     $i++;
 }
 
+function loadFile($src, $category) {
+    $filename = basename($src);
+    $dirPath = 'images/' . $category;
+    $filePath = $dirPath . '/' . $filename;
 
-function createDir($arr = array()){
-    $path = '';
-    foreach ($arr as $folder) {
-        $path .= $folder.'/';
-        @mkdir($path);
+    // Проверяем, существует ли папка
+    if (!file_exists($dirPath)) {
+        mkdir($dirPath, 0777, true); // Создаем папку, если она не существует
     }
-    return (file_exists("https://" . $path));
+
+    // Проверяем, существует ли файл
+    if (file_exists($filePath)) {
+        echo 'Файл уже существует: ' . $filePath . PHP_EOL;
+        // Удаляем дублирующиеся файлы в папке
+        removeDuplicateFiles($dirPath, $filename);
+    }
+
+    // Получаем содержимое изображения
+    $imageContent = file_get_contents($src);
+
+    // Сохраняем содержимое в файловой системе
+    if ($imageContent !== false) {
+        file_put_contents($filePath, $imageContent);
+        echo 'Изображение успешно загружено и сохранено: ' . $filePath . PHP_EOL;
+    } else {
+        echo 'Не удалось загрузить изображение.' . PHP_EOL;
+    }
 }
 
-function loadFile($path = '', $link = '', $ico = false) {
-    $link = substr($link, 1);
-    $link = substr($link, 0, -1);
-    $link = explode('/', $link);
-    $name = array_pop($link);
-    $name .= ($ico) ? '_icon.' : '.';
-    $exp = explode('.', $path);
-    $exp = end($exp);
-    if (createDir($link)) {
-        $link = implode('/', $link);
-        $link .= '/';
-        $link = $link . $name . $exp;
-        set_time_limit(30);
-        $content = file_get_contents($path);
-        file_put_contents($link, $content);
-        return $link;
+function removeDuplicateFiles($dirPath, $filename) {
+    $files = glob($dirPath . '/*'); // Получаем список файлов в папке
+
+    foreach ($files as $file) {
+        if (is_file($file) && basename($file) === $filename) {
+            unlink($file); // Удаляем дублирующийся файл
+            echo 'Удален дублирующийся файл: ' . $file . PHP_EOL;
+        }
     }
 }
 
+function getCategoryName($link) {
+    $pattern = '/\/katalog\/([^\/]+)/';
+    preg_match($pattern, $link, $matches);
 
-function getUTF8($str = '') {
-    set_time_limit(5);
-    return mb_convert_encoding($str, "UTF-8", "Windows-1251");
+    return $matches[1];
 }
 
 function getSubCategories($obj) {
@@ -105,52 +117,64 @@ function getProducts($link = '') {
     $prods = array();
     foreach ($html->find('#mainContainer ul li .products-list__caption a') as $product) {
         set_time_limit(30);
-        $prods[] = getProduct($product->href);
+
+        $prods[] = getProduct($link, $product->href);
     }
     return $prods;
 }
 
-function getProduct($link = '') {
-    $html = file_get_html($link);
-    var_dump('pr: ' . $link);
-    $array = explode('/', rtrim($link, '/'));
-    $params = array(
-        'LINK' => $link,
-        'ALIAS' => end($array),
-        'TITLE' => $html->find('.catalogue__product-name', 0)->plaintext,
-        'CODE' => $html->find('.product-page__vendor-code span', 0)->plaintext,
-        'SHORT_DESCRIPTION' =>
-            ($html->find('#product .short-descr.editor h1', 0) ? $html->find('#product .short-descr.editor h1', 0)->plaintext :
-                ($html->find('#product .short-descr.editor p span', 0) ? $html->find('#product .short-descr.editor p span', 0)->plaintext :
-                    ($html->find('#product .short-descr.editor li', 0) ? $html->find('#product .short-descr.editor li', 0)->plaintext : ''))),
-            );
+function getProduct($catLink = '', $productLink = '') {
+    $html = file_get_html($productLink);
+    var_dump('pr: ' . $productLink);
+    $array = explode('/', rtrim($productLink, '/'));
 
-    $description = '';
-    $shortDescription = $html->find('.product-short-description');
-    if ($shortDescription) {
-        foreach ($shortDescription as $txt) {
-            $text = $txt->innertext;
-            $description .= $text . '<br>';
+    $linkCategory = getCategoryName($catLink);
+    $productCategory = getCategoryName($productLink);
+
+    if ($linkCategory === $productCategory) {
+        $params = array(
+            'LINK' => $productLink,
+            'ALIAS' => basename(end($array)),
+            'TITLE' => $html->find('.catalogue__product-name', 0)->plaintext,
+            'CODE' => $html->find('.product-page__vendor-code span', 0)->plaintext,
+            'SHORT_DESCRIPTION' =>
+                ($html->find('#product .short-descr.editor h1', 0) ? $html->find('#product .short-descr.editor h1', 0)->plaintext :
+                    ($html->find('#product .short-descr.editor p', 0) ? $html->find('#product .short-descr.editor p', 0)->plaintext :
+                        ($html->find('#product .short-descr.editor', 0) ? $html->find('#product .short-descr.editor', 0)->plaintext : ''))),
+        );
+
+        $description = '';
+        $shortDescription = $html->find('.product-short-description');
+        switch (true) {
+            case ($shortDescription):
+                foreach ($shortDescription as $txt) {
+                    $text = $txt->innertext;
+                    $description .= $text . '<br>';
+                }
+                break;
+            case ($descriptionElement = $html->find('.editor')):
+                foreach ($descriptionElement as $txt) {
+                    $text = $txt->innertext;
+                    $description .= $text . '<br>';
+                }
+                break;
+            default:
+                break;
+        }
+
+        $params['DESCRIPTION'] = $description;
+
+        foreach ($html->find('.product-page__img-image ') as $c => $img) {
+            $c++;
+            $category = getCategoryName($productLink);
+            $params['IMAGES'][] = 'images/' . $category . '/' . basename($img->src);
+            loadFile($img->src, $category);
         }
     } else {
-        $descriptionElement = $html->find('.editor', 0);
-        if ($descriptionElement) {
-            $description = $descriptionElement->innertext;
-        } else {
-            // Добавьте другие проверки и условия, если есть дополнительные варианты описания товара
-            $customDescriptionElement = $html->find('.tabs-content__inner .editor', 0);
-            if ($customDescriptionElement) {
-                $description = $customDescriptionElement->innertext;
-            }
-        }
-    }
-
-    $params['DESCRIPTION'] = $description;
-
-    $imageCounter = 1;
-    foreach ($html->find('.product-page__img-image ') as $img) {
-        $params['IMAGES'][] = $img->src;
-        $imageCounter++;
+        $params = array(
+            'LINK' => $productLink,
+            'ALIAS' => end($array),
+        );
     }
 
     return $params;
@@ -160,7 +184,6 @@ $content = "<?php\n\n";
 $content .= '$catalog = ' . var_export($catalog, true) . ";\n\n";
 $content .= "return \$catalog;";
 file_put_contents('dverprom.db.php', $content);
-
 
 print '<pre>';
 print_r($catalog);
