@@ -1,12 +1,11 @@
 <?php
 $start = microtime(true);
 header("Content-Type: text/html; charset=utf-8");
-//header("Content-Type: text/html; charset=windows-1251");
 require_once('simple_html_dom.php');
 require_once('Array2XML.php');
 
-define('URL','https://dverprom.by/katalog/');
-define('VIEW','?limit=3');
+const URL = 'https://dverprom.by/katalog/';
+const VIEW = '?limit=3';
 
 $i = 0;
 $html = file_get_html(URL);
@@ -19,6 +18,7 @@ foreach ($html->find('.nav-submenu__item') as $ins ) {
     $href = $a->href;
     $array = explode('/', rtrim($href, '/'));
     $alias = end($array);
+    $alias = preg_replace('/\.html$/', '', $alias);
 
     $category = array(
         'TITLE' => $a->plaintext,
@@ -55,9 +55,8 @@ function loadFile($src, $category) {
 
     // Проверяем, существует ли файл
     if (file_exists($filePath)) {
-        echo 'Файл уже существует: ' . $filePath . PHP_EOL;
-        // Удаляем дублирующиеся файлы в папке
-        removeDuplicateFiles($dirPath, $filename);
+        //echo 'Файл уже существует: ' . $filePath . PHP_EOL;
+        return;
     }
 
     // Получаем содержимое изображения
@@ -69,17 +68,6 @@ function loadFile($src, $category) {
         echo 'Изображение успешно загружено и сохранено: ' . $filePath . PHP_EOL;
     } else {
         echo 'Не удалось загрузить изображение.' . PHP_EOL;
-    }
-}
-
-function removeDuplicateFiles($dirPath, $filename) {
-    $files = glob($dirPath . '/*'); // Получаем список файлов в папке
-
-    foreach ($files as $file) {
-        if (is_file($file) && basename($file) === $filename) {
-            unlink($file); // Удаляем дублирующийся файл
-            echo 'Удален дублирующийся файл: ' . $file . PHP_EOL;
-        }
     }
 }
 
@@ -110,7 +98,6 @@ function getSubCategories($obj) {
     return $subCats;
 }
 
-
 function getProducts($link = '') {
     $html = file_get_html($link.VIEW);
     var_dump($link);
@@ -131,39 +118,36 @@ function getProduct($catLink = '', $productLink = '') {
     $linkCategory = getCategoryName($catLink);
     $productCategory = getCategoryName($productLink);
 
+    $alias = pathinfo(end($array), PATHINFO_FILENAME);
+
     if ($linkCategory === $productCategory) {
         $params = array(
             'LINK' => $productLink,
-            'ALIAS' => basename(end($array)),
+            'ALIAS' => $alias,
             'TITLE' => $html->find('.catalogue__product-name', 0)->plaintext,
             'CODE' => $html->find('.product-page__vendor-code span', 0)->plaintext,
-            'SHORT_DESCRIPTION' =>
-                ($html->find('#product .short-descr.editor h1', 0) ? $html->find('#product .short-descr.editor h1', 0)->plaintext :
-                    ($html->find('#product .short-descr.editor p', 0) ? $html->find('#product .short-descr.editor p', 0)->plaintext :
-                        ($html->find('#product .short-descr.editor', 0) ? $html->find('#product .short-descr.editor', 0)->plaintext : ''))),
         );
 
-        $description = '';
-        $shortDescription = $html->find('.product-short-description');
-        switch (true) {
-            case ($shortDescription):
-                foreach ($shortDescription as $txt) {
-                    $text = $txt->innertext;
-                    $description .= $text . '<br>';
-                }
-                break;
-            case ($descriptionElement = $html->find('.editor')):
-                foreach ($descriptionElement as $txt) {
-                    $text = $txt->innertext;
-                    $description .= $text . '<br>';
-                }
-                break;
-            default:
-                break;
+        // Добавление краткого описания к продукту
+        foreach ($html->find('#product .short-descr.editor') as $txt) {
+            $description = '';
+
+            $text = $txt->innertext;
+            $description .= trim($text) . '<br>';
+
+            $params['SHORT_DESCRIPTION'] = $description;
         }
 
-        $params['DESCRIPTION'] = $description;
+        // Добавление описания к продукту
+        foreach ($html->find('.editor') as $txt) {
+            $description = '';
 
+            $text = $txt->innertext;
+            $description .= trim($text) . '<br>';
+            $params['DESCRIPTION'] = $description;
+        }
+
+        // Добавление картинок к продукту
         foreach ($html->find('.product-page__img-image ') as $c => $img) {
             $c++;
             $category = getCategoryName($productLink);
