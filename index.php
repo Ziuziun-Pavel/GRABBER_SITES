@@ -5,7 +5,7 @@ require_once('simple_html_dom.php');
 require_once('Array2XML.php');
 
 const URL = 'https://dverprom.by/katalog/';
-const VIEW = '?limit=3';
+const VIEW = '?limit=10000000';
 
 $i = 0;
 $html = file_get_html(URL);
@@ -139,7 +139,7 @@ function getProduct($catLink = '', $productLink = '') {
         }
 
         // Добавление описания к продукту
-        foreach ($html->find('.editor') as $txt) {
+        foreach ($html->find('.product-info__tabs-container .editor') as $txt) {
             $description = '';
 
             $text = $txt->innertext;
