@@ -158,7 +158,16 @@ function getProduct($catLink = '', $productLink = '') {
         $params = array(
             'LINK' => $productLink,
             'ALIAS' => end($array),
+            'TITLE' => $html->find('.catalogue__product-name', 0)->plaintext,
         );
+
+        // Добавление картинок к продукту
+        foreach ($html->find('.product-page__img-image ') as $c => $img) {
+            $c++;
+            $category = getCategoryName($productLink);
+            $params['IMAGES'][] = 'images/' . $category . '/' . basename($img->src);
+            loadFile($img->src, $category);
+        }
     }
 
     return $params;
